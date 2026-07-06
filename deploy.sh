@@ -191,7 +191,7 @@ else
         FINAL_BINARY_PATH="$BUILD_DIR/hardy/target/release/hardy-bpa-server"
         FINAL_TCPCL_BINARY_PATH="$BUILD_DIR/hardy/target/release/hardy-tcpclv4-server"
     elif [ "$TARGET_ARCH" = "armv7l" ] || [ "$TARGET_ARCH" = "armv7" ]; then
-        echo "Performing cross-compilation for armv7l using Docker..."
+        echo "Performing cross-compilation for armv7l (statically linked via MUSL) using Docker..."
         cd "$BUILD_DIR/hardy"
         docker run --rm \
           -v "$(pwd)":/usr/src/myapp \
@@ -199,12 +199,12 @@ else
           rust:slim-bullseye sh -c "
             apt-get update && \
             apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6-dev-armhf-cross protobuf-compiler && \
-            rustup target add armv7-unknown-linux-gnueabihf && \
-            CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc cargo build --target armv7-unknown-linux-gnueabihf --release --workspace --bins && \
+            rustup target add armv7-unknown-linux-musleabihf && \
+            CARGO_TARGET_ARMV7_UNKNOWN_LINUX_MUSLEABIHF_LINKER=arm-linux-gnueabihf-gcc cargo build --target armv7-unknown-linux-musleabihf --release --workspace --bins && \
             chown -R $(id -u):$(id -g) target/
           "
-        FINAL_BINARY_PATH="$BUILD_DIR/hardy/target/armv7-unknown-linux-gnueabihf/release/hardy-bpa-server"
-        FINAL_TCPCL_BINARY_PATH="$BUILD_DIR/hardy/target/armv7-unknown-linux-gnueabihf/release/hardy-tcpclv4-server"
+        FINAL_BINARY_PATH="$BUILD_DIR/hardy/target/armv7-unknown-linux-musleabihf/release/hardy-bpa-server"
+        FINAL_TCPCL_BINARY_PATH="$BUILD_DIR/hardy/target/armv7-unknown-linux-musleabihf/release/hardy-tcpclv4-server"
     else
         echo "Unsupported target architecture for automatic compilation: $TARGET_ARCH."
         echo "Please compile the binaries manually for $TARGET_ARCH and run this script using --source path."
