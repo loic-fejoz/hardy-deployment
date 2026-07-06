@@ -8,11 +8,13 @@ TARGET_USER=""
 DTN_EID=""
 IPN_EID="ipn:1.0"
 TELEMETRY_SERVER=""
+TELEMETRY_PASSED=""
 LAYOUT=""
 SOURCE_MODE=""
 BINARY_PATH=""
 TCPCL_BINARY_PATH=""
 DEPLOY_TCPCL="no"
+NON_INTERACTIVE="no"
 
 # Determine directory of this script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -33,6 +35,7 @@ print_help() {
     echo "  -s, --source <mode>        Binary source: 'path' or 'compile'"
     echo "  -b, --binary <path>        Path to local pre-compiled hardy-bpa-server"
     echo "  --tcpcl-binary <path>      Path to local pre-compiled hardy-tcpclv4-server"
+    echo "  -y, --yes, --non-interactive  Run non-interactively without prompting"
     echo "  --help                     Show this help message"
 }
 
@@ -44,11 +47,12 @@ while [[ $# -gt 0 ]]; do
         -u|--user) TARGET_USER="$2"; shift 2 ;;
         -d|--dtn-eid) DTN_EID="$2"; shift 2 ;;
         -i|--ipn-eid) IPN_EID="$2"; shift 2 ;;
-        -t|--telemetry) TELEMETRY_SERVER="$2"; shift 2 ;;
+        -t|--telemetry) TELEMETRY_SERVER="$2"; TELEMETRY_PASSED="yes"; shift 2 ;;
         -l|--layout) LAYOUT="$2"; shift 2 ;;
         -s|--source) SOURCE_MODE="$2"; shift 2 ;;
         -b|--binary) BINARY_PATH="$2"; shift 2 ;;
         --tcpcl-binary) TCPCL_BINARY_PATH="$2"; DEPLOY_TCPCL="yes"; shift 2 ;;
+        -y|--yes|--non-interactive) NON_INTERACTIVE="yes"; shift 1 ;;
         --help) print_help; exit 0 ;;
         *) echo "Unknown option: $1"; print_help; exit 1 ;;
     esac
@@ -61,6 +65,10 @@ echo "==============================================="
 
 # Host
 if [ -z "$TARGET_HOST" ]; then
+    if [ "$NON_INTERACTIVE" = "yes" ]; then
+        echo "Error: Target host is required in non-interactive mode."
+        exit 1
+    fi
     read -p "Target IP/Hostname: " TARGET_HOST
     if [ -z "$TARGET_HOST" ]; then
         echo "Error: Host cannot be empty."
@@ -70,21 +78,29 @@ fi
 
 # Port
 if [ -z "$TARGET_PORT" ]; then
-    read -p "Target SSH Port [22]: " TARGET_PORT
-    TARGET_PORT=${TARGET_PORT:-22}
+    if [ "$NON_INTERACTIVE" = "yes" ]; then
+        TARGET_PORT="22"
+    else
+        read -p "Target SSH Port [22]: " TARGET_PORT
+        TARGET_PORT=${TARGET_PORT:-22}
+    fi
 fi
 
 # Layout
 if [ -z "$LAYOUT" ]; then
-    echo "Select target layout:"
-    echo "  1) Debian (standard system paths: /usr/local/bin, /etc/hardy, /var/lib/hardy)"
-    echo "  2) Pi-Star (home directory and base on USB key: /mnt/usb-storage/hardy-data)"
-    read -p "Choice (1 or 2): " layout_choice
-    case "$layout_choice" in
-        1) LAYOUT="debian" ;;
-        2) LAYOUT="pi-star" ;;
-        *) echo "Invalid choice"; exit 1 ;;
-    esac
+    if [ "$NON_INTERACTIVE" = "yes" ]; then
+        LAYOUT="debian"
+    else
+        echo "Select target layout:"
+        echo "  1) Debian (standard system paths: /usr/local/bin, /etc/hardy, /var/lib/hardy)"
+        echo "  2) Pi-Star (home directory and base on USB key: /mnt/usb-storage/hardy-data)"
+        read -p "Choice (1 or 2): " layout_choice
+        case "$layout_choice" in
+            1) LAYOUT="debian" ;;
+            2) LAYOUT="pi-star" ;;
+            *) echo "Invalid choice"; exit 1 ;;
+        esac
+    fi
 fi
 
 # SSH User defaults if not specified
@@ -106,50 +122,70 @@ echo "Target system architecture: $TARGET_ARCH"
 
 # EID with amateur radio callsign recommendation
 if [ -z "$DTN_EID" ]; then
-    echo ""
-    echo "--- EID Configuration ---"
-    echo "Note: For amateur radio nodes, it is recommended to use your callsign."
-    echo "Example: dtn://f4jxq/ or dtn://g4dpz/"
-    read -p "Enter DTN EID [dtn://local-node/]: " DTN_EID
-    DTN_EID=${DTN_EID:-dtn://local-node/}
+    if [ "$NON_INTERACTIVE" = "yes" ]; then
+        DTN_EID="dtn://local-node/"
+    else
+        echo ""
+        echo "--- EID Configuration ---"
+        echo "Note: For amateur radio nodes, it is recommended to use your callsign."
+        echo "Example: dtn://f4jxq/ or dtn://g4dpz/"
+        read -p "Enter DTN EID [dtn://local-node/]: " DTN_EID
+        DTN_EID=${DTN_EID:-dtn://local-node/}
+    fi
 fi
 
 if [ -z "$IPN_EID" ] || [ "$IPN_EID" = "ipn:1.0" ]; then
-    read -p "Enter IPN EID [ipn:1.0]: " ipn_input
-    IPN_EID=${ipn_input:-ipn:1.0}
+    if [ "$NON_INTERACTIVE" = "yes" ]; then
+        IPN_EID="ipn:1.0"
+    else
+        read -p "Enter IPN EID [ipn:1.0]: " ipn_input
+        IPN_EID=${ipn_input:-ipn:1.0}
+    fi
 fi
 
 # Telemetry
-if [ -z "$TELEMETRY_SERVER" ]; then
-    echo ""
-    echo "--- OpenTelemetry Telemetry ---"
-    echo "Do you want to export logs and metrics to a remote OpenTelemetry collector?"
-    echo "If yes, enter the OTLP gRPC endpoint URL (e.g., http://192.168.1.100:4317)."
-    read -p "Telemetry endpoint (leave empty for local logs only): " TELEMETRY_SERVER
+if [ -z "$TELEMETRY_SERVER" ] && [ -z "$TELEMETRY_PASSED" ]; then
+    if [ "$NON_INTERACTIVE" = "yes" ]; then
+        TELEMETRY_SERVER=""
+    else
+        echo ""
+        echo "--- OpenTelemetry Telemetry ---"
+        echo "Do you want to export logs and metrics to a remote OpenTelemetry collector?"
+        echo "If yes, enter the OTLP gRPC endpoint URL (e.g., http://192.168.1.100:4317)."
+        read -p "Telemetry endpoint (leave empty for local logs only): " TELEMETRY_SERVER
+    fi
 fi
 
 # Ask if we want to deploy the standalone TCPCL CLA server
 if [ "$DEPLOY_TCPCL" = "no" ] && [ -z "$TCPCL_BINARY_PATH" ]; then
-    echo ""
-    read -p "Do you want to deploy the standalone TCPCLv4 CLA server (hardy-tcpclv4-server)? [y/N]: " deploy_cl_choice
-    case "$deploy_cl_choice" in
-        [yY]|[yY][eE][sS]) DEPLOY_TCPCL="yes" ;;
-        *) DEPLOY_TCPCL="no" ;;
-    esac
+    if [ "$NON_INTERACTIVE" = "yes" ]; then
+        DEPLOY_TCPCL="no"
+    else
+        echo ""
+        read -p "Do you want to deploy the standalone TCPCLv4 CLA server (hardy-tcpclv4-server)? [y/N]: " deploy_cl_choice
+        case "$deploy_cl_choice" in
+            [yY]|[yY][eE][sS]) DEPLOY_TCPCL="yes" ;;
+            *) DEPLOY_TCPCL="no" ;;
+        esac
+    fi
 fi
 
 # Binary source
 if [ -z "$SOURCE_MODE" ]; then
-    echo ""
-    echo "--- Binary Source Selection ---"
-    echo "  1) Provide path to pre-compiled local binary"
-    echo "  2) Clone from GitHub (official) and compile/cross-compile now"
-    read -p "Choice (1 or 2): " source_choice
-    case "$source_choice" in
-        1) SOURCE_MODE="path" ;;
-        2) SOURCE_MODE="compile" ;;
-        *) echo "Invalid choice"; exit 1 ;;
-    esac
+    if [ "$NON_INTERACTIVE" = "yes" ]; then
+        SOURCE_MODE="path"
+    else
+        echo ""
+        echo "--- Binary Source Selection ---"
+        echo "  1) Provide path to pre-compiled local binary"
+        echo "  2) Clone from GitHub (official) and compile/cross-compile now"
+        read -p "Choice (1 or 2): " source_choice
+        case "$source_choice" in
+            1) SOURCE_MODE="path" ;;
+            2) SOURCE_MODE="compile" ;;
+            *) echo "Invalid choice"; exit 1 ;;
+        esac
+    fi
 fi
 
 # Obtain Binaries
@@ -158,6 +194,10 @@ FINAL_TCPCL_BINARY_PATH=""
 
 if [ "$SOURCE_MODE" = "path" ]; then
     if [ -z "$BINARY_PATH" ]; then
+        if [ "$NON_INTERACTIVE" = "yes" ]; then
+            echo "Error: Binary path is required in non-interactive mode."
+            exit 1
+        fi
         read -p "Enter path to pre-compiled hardy-bpa-server binary: " BINARY_PATH
     fi
     if [ ! -f "$BINARY_PATH" ]; then
@@ -168,6 +208,10 @@ if [ "$SOURCE_MODE" = "path" ]; then
 
     if [ "$DEPLOY_TCPCL" = "yes" ]; then
         if [ -z "$TCPCL_BINARY_PATH" ]; then
+            if [ "$NON_INTERACTIVE" = "yes" ]; then
+                echo "Error: TCPCL binary path is required in non-interactive mode."
+                exit 1
+            fi
             read -p "Enter path to pre-compiled hardy-tcpclv4-server binary: " TCPCL_BINARY_PATH
         fi
         if [ ! -f "$TCPCL_BINARY_PATH" ]; then
@@ -289,7 +333,7 @@ fi
 
 # Interactive TCPCL connection instance configuration (like Wireguard wg0, wg1...)
 INSTANCES_TO_ENABLE=()
-if [ "$DEPLOY_TCPCL" = "yes" ]; then
+if [ "$DEPLOY_TCPCL" = "yes" ] && [ "$NON_INTERACTIVE" = "no" ]; then
     echo ""
     echo "--- Standalone TCPCL Connection Setup ---"
     read -p "Would you like to configure an active outbound TCPCL instance now (e.g. like wg0)? [y/N]: " add_inst_choice

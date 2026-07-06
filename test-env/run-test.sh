@@ -67,7 +67,8 @@ docker exec -t hardy-test-source sh -c "
               --ipn-eid ipn:99.0 \
               --source path \
               --binary /binaries/hardy-bpa-server \
-              --tcpcl-binary /binaries/hardy-tcpclv4-server
+              --tcpcl-binary /binaries/hardy-tcpclv4-server \
+              --non-interactive
 "
 
 echo ""
