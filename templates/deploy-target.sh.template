@@ -124,7 +124,7 @@ if command -v nft &>/dev/null && [ -f /etc/nftables.conf ]; then
     echo "Hardening firewall rules in /etc/nftables.conf (Local Subnet: ${LOCAL_SUBNET})..."
     awk '
         $0 ~ /tcp dport 4556/ { next }
-        /chain input \{/ {
+        /type filter hook input/ {
             print $0
             print "\t\tip saddr '"${LOCAL_SUBNET}"' tcp dport 4556 accept"
             print "\t\tiifname \"wg0\" tcp dport 4556 accept"
@@ -200,7 +200,8 @@ fi
 
 if [ "$SYNC_SUCCESS" = "no" ] && command -v apt-get &>/dev/null; then
     echo "NTP clients missing or failed. Attempting to install systemd-timesyncd..."
-    if apt-get update -y && apt-get install -y systemd-timesyncd; then
+    # Apply a 5-second connection timeout to prevent hanging on offline systems
+    if (apt-get update -y -o Acquire::http::Timeout="5" || true) && apt-get install -y -o Acquire::http::Timeout="5" systemd-timesyncd; then
         echo "systemd-timesyncd installed successfully. Triggering sync..."
         systemctl enable systemd-timesyncd 2>/dev/null || true
         if systemctl restart systemd-timesyncd 2>/dev/null; then
