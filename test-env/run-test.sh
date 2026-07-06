@@ -5,8 +5,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BIN_DIR="/home/loic/projets/hardy/target/release"
 
+TEST_MODE="path"
+if [ "$1" = "--compile" ]; then
+  TEST_MODE="compile"
+fi
+
 echo "==============================================="
 echo "   Hardy Deployment Local Docker Integration Test"
+echo "   Mode: ${TEST_MODE}"
 echo "==============================================="
 
 # 1. Clean up old containers
@@ -33,22 +39,37 @@ docker exec hardy-test-target sh -c "
   chmod +x /usr/local/bin/systemctl
 "
 
-# 4. Start source container in the background
-echo "Starting source container..."
-docker run -d --name hardy-test-source \
-  --link hardy-test-target:target \
-  -v "${PROJECT_DIR}:/app" \
-  -v "${BIN_DIR}:/binaries" \
-  debian:11-slim tail -f /dev/null
+# 4. Start source container based on mode
+if [ "$TEST_MODE" = "compile" ]; then
+  echo "Starting source container (Rust compilation environment)..."
+  docker run -d --name hardy-test-source \
+    --link hardy-test-target:target \
+    -v "${PROJECT_DIR}:/app" \
+    rust:slim-bullseye tail -f /dev/null
 
-# 5. Configure SSH client and keys on source, then copy pubkey to target
-echo "Setting up SSH keys..."
-docker exec hardy-test-source sh -c "
-  apt-get update && \
-  apt-get install -y openssh-client && \
-  mkdir -p /root/.ssh && \
-  ssh-keygen -t rsa -N '' -f /root/.ssh/id_rsa
-"
+  echo "Setting up compilation and SSH dependencies on source..."
+  docker exec hardy-test-source sh -c "
+    apt-get update && \
+    apt-get install -y openssh-client git protobuf-compiler && \
+    mkdir -p /root/.ssh && \
+    ssh-keygen -t rsa -N '' -f /root/.ssh/id_rsa
+  "
+else
+  echo "Starting source container (Path deployment environment)..."
+  docker run -d --name hardy-test-source \
+    --link hardy-test-target:target \
+    -v "${PROJECT_DIR}:/app" \
+    -v "${BIN_DIR}:/binaries" \
+    debian:11-slim tail -f /dev/null
+
+  echo "Setting up SSH keys..."
+  docker exec hardy-test-source sh -c "
+    apt-get update && \
+    apt-get install -y openssh-client && \
+    mkdir -p /root/.ssh && \
+    ssh-keygen -t rsa -N '' -f /root/.ssh/id_rsa
+  "
+fi
 
 # Extract public key from source and write to target
 PUBKEY=$(docker exec hardy-test-source cat /root/.ssh/id_rsa.pub)
@@ -56,31 +77,46 @@ docker exec hardy-test-target sh -c "echo '${PUBKEY}' >> /root/.ssh/authorized_k
 
 # 6. Run the deployment script inside the source container
 echo "Running deploy.sh in source container..."
-docker exec -t hardy-test-source sh -c "
-  cd /app && \
-  ssh-keyscan -H target >> /root/.ssh/known_hosts && \
-  ./deploy.sh --host target \
-              --port 22 \
-              --user root \
-              --layout debian \
-              --dtn-eid dtn://f4jxq-test/ \
-              --ipn-eid ipn:99.0 \
-              --source path \
-              --binary /binaries/hardy-bpa-server \
-              --tcpcl-binary /binaries/hardy-tcpclv4-server \
-              --non-interactive
-"
+if [ "$TEST_MODE" = "compile" ]; then
+  docker exec -t hardy-test-source sh -c "
+    cd /app && \
+    ssh-keyscan -H target >> /root/.ssh/known_hosts && \
+    ./deploy.sh --host target \
+                --port 22 \
+                --user root \
+                --layout debian \
+                --dtn-eid dtn://f4jxq-test/ \
+                --ipn-eid ipn:99.0 \
+                --source compile \
+                --non-interactive
+  "
+else
+  docker exec -t hardy-test-source sh -c "
+    cd /app && \
+    ssh-keyscan -H target >> /root/.ssh/known_hosts && \
+    ./deploy.sh --host target \
+                --port 22 \
+                --user root \
+                --layout debian \
+                --dtn-eid dtn://f4jxq-test/ \
+                --ipn-eid ipn:99.0 \
+                --source path \
+                --binary /binaries/hardy-bpa-server \
+                --tcpcl-binary /binaries/hardy-tcpclv4-server \
+                --non-interactive
+  "
+fi
 
 echo ""
 echo "==============================================="
 echo "Verifying files deployed on target container:"
 echo "-----------------------------------------------"
 echo "--- Directories ---"
-docker exec hardy-test-target ls -la /usr/local/bin/hardy-bpa-server /usr/local/bin/hardy-tcpclv4-server
+docker exec hardy-test-target ls -la /usr/local/bin/hardy-bpa-server
 echo "--- Configuration ---"
 docker exec hardy-test-target cat /etc/hardy/my-config.yaml
 echo "--- Systemd unit file ---"
-docker exec hardy-test-target cat /etc/systemd/system/hardy-bpa-server.service 2>/dev/null || docker exec hardy-test-target cat /etc/systemd/system/hardy-bpa.service
+docker exec hardy-test-target cat /etc/systemd/system/hardy-bpa.service
 echo "==============================================="
 
 # Cleanup
