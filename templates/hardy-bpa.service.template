@@ -12,5 +12,12 @@ ExecStart=@EXEC_START@
 Restart=always
 RestartSec=5
 
+# Sandboxing & Security Hardening
+PrivateTmp=@PRIVATE_TMP@
+ProtectSystem=@PROTECT_SYSTEM@
+ProtectHome=@PROTECT_HOME@
+NoNewPrivileges=@NO_NEW_PRIVILEGES@
+ReadWritePaths=@READ_WRITE_PATHS@
+
 [Install]
 WantedBy=multi-user.target

@@ -88,6 +88,7 @@ if [ "$TEST_MODE" = "compile" ]; then
                 --dtn-eid dtn://f4jxq-test/ \
                 --ipn-eid ipn:99.0 \
                 --source compile \
+                --deploy-tcpcl \
                 --non-interactive
   "
 else
@@ -112,11 +113,12 @@ echo "==============================================="
 echo "Verifying files deployed on target container:"
 echo "-----------------------------------------------"
 echo "--- Directories ---"
-docker exec hardy-test-target ls -la /usr/local/bin/hardy-bpa-server
+docker exec hardy-test-target ls -la /usr/local/bin/hardy-bpa-server /usr/local/bin/hardy-tcpclv4-server
 echo "--- Configuration ---"
 docker exec hardy-test-target cat /etc/hardy/my-config.yaml
-echo "--- Systemd unit file ---"
+echo "--- Systemd unit files ---"
 docker exec hardy-test-target cat /etc/systemd/system/hardy-bpa.service
+docker exec hardy-test-target cat /etc/systemd/system/hardy-tcpcl@.service
 echo "==============================================="
 
 # Cleanup

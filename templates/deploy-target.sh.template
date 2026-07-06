@@ -1,0 +1,259 @@
+#!/bin/bash
+set -e
+
+# Target configuration variables passed dynamically
+LAYOUT="@LAYOUT@"
+CONF_DIR="@CONF_DIR@"
+DB_DIR="@DB_DIR@"
+STORE_DIR="@STORE_DIR@"
+BIN_DEST="@BIN_DEST@"
+TCPCL_BIN_DEST="@TCPCL_BIN_DEST@"
+CONF_DEST="@CONF_DEST@"
+ROUTES_DEST="@ROUTES_DEST@"
+SERVICE_USER="@SERVICE_USER@"
+DEPLOY_TCPCL="@DEPLOY_TCPCL@"
+LOCAL_SUBNET="@LOCAL_SUBNET@"
+INSTALL_FAIL2BAN="@INSTALL_FAIL2BAN@"
+INSTALL_UNATTENDED_UPGRADES="@INSTALL_UNATTENDED_UPGRADES@"
+IS_RO="@IS_RO@"
+INSTANCES_TO_ENABLE=(@INSTANCES_TO_ENABLE@)
+# ANSI Color Codes for output
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo "==============================================="
+echo "   Running Remote Deployment Script on Target   "
+echo "==============================================="
+
+# 1. Remount to RW if needed
+if [ "$IS_RO" = "yes" ]; then
+    echo "Remounting target filesystem to Read-Write..."
+    mount -o remount,rw /
+fi
+
+# 2. Setup user and directories
+if [ "$LAYOUT" = "debian" ]; then
+    echo "Registering unprivileged hardy system user..."
+    useradd -r -s /usr/sbin/nologin hardy 2>/dev/null || true
+    mkdir -p "${CONF_DIR}" "${DB_DIR}" "${STORE_DIR}"
+    chown -R hardy:hardy "${CONF_DIR}" "${DB_DIR}" "${STORE_DIR}"
+else
+    # Pi-Star
+    echo "Setting up Pi-Star directories..."
+    mkdir -p "${CONF_DIR}"
+    mkdir -p "${DB_DIR}" "${STORE_DIR}"
+    chown -R pi-star:pi-star "${DB_DIR}"
+fi
+
+# 3. Move BPA binary
+echo "Installing BPA binary to ${BIN_DEST}..."
+mv /tmp/hardy-bpa-server "${BIN_DEST}"
+chmod +x "${BIN_DEST}"
+
+# 4. Move TCPCL binary if enabled
+if [ "$DEPLOY_TCPCL" = "yes" ]; then
+    echo "Installing TCPCL binary to ${TCPCL_BIN_DEST}..."
+    mv /tmp/hardy-tcpclv4-server "${TCPCL_BIN_DEST}"
+    chmod +x "${TCPCL_BIN_DEST}"
+fi
+
+# 5. Move configurations
+echo "Installing configuration files..."
+mv /tmp/my-config.yaml "${CONF_DEST}"
+if [ -f /tmp/static_routes.yaml ]; then
+    echo "Installing static_routes.yaml..."
+    mv /tmp/static_routes.yaml "${ROUTES_DEST}"
+elif [ ! -f "${ROUTES_DEST}" ]; then
+    touch "${ROUTES_DEST}"
+fi
+
+# Move TCPCL instance configurations if any
+for inst in "${INSTANCES_TO_ENABLE[@]}"; do
+    if [ -f "/tmp/tcpcl-${inst}.yaml" ]; then
+        echo "Installing instance configuration for ${inst}..."
+        mv "/tmp/tcpcl-${inst}.yaml" "${CONF_DIR}/tcpcl-${inst}.yaml"
+    fi
+done
+
+# Ensure correct permissions
+if [ "$LAYOUT" = "debian" ]; then
+    chown -R hardy:hardy "${CONF_DIR}" "${DB_DIR}"
+fi
+
+# 6. Install systemd unit files
+echo "Installing systemd service units..."
+mv /tmp/hardy-bpa.service /etc/systemd/system/hardy-bpa.service
+if [ "$DEPLOY_TCPCL" = "yes" ]; then
+    mv /tmp/hardy-tcpcl@.service /etc/systemd/system/hardy-tcpcl@.service
+fi
+
+# 7. Secure host (Firewall hardening)
+if [ -f /etc/iptables.rules ]; then
+    echo "Hardening firewall rules in /etc/iptables.rules (Local Subnet: ${LOCAL_SUBNET})..."
+    awk '
+        /INPUT/ && /--dport 22 / && /ACCEPT/ { print "-A INPUT -s '"${LOCAL_SUBNET}"' -p tcp -m tcp --dport 22 -j ACCEPT"; next }
+        /INPUT/ && /--dport 80 / && /ACCEPT/ { print "-A INPUT -s '"${LOCAL_SUBNET}"' -p tcp -m tcp --dport 80 -j ACCEPT"; next }
+        /INPUT/ && /--dport 443 / && /ACCEPT/ { print "-A INPUT -s '"${LOCAL_SUBNET}"' -p tcp -m tcp --dport 443 -j ACCEPT"; next }
+        /INPUT/ && /--dport 139 / && /ACCEPT/ { print "-A INPUT -s '"${LOCAL_SUBNET}"' -p tcp -m tcp --dport 139 -j ACCEPT"; next }
+        /INPUT/ && /--dport 2222 / && /ACCEPT/ { print "-A INPUT -s '"${LOCAL_SUBNET}"' -p tcp -m tcp --dport 2222 -j ACCEPT"; next }
+        /INPUT/ && /--dport 4556/ { next }
+        $0 == "-A INPUT -i wg0 -j ACCEPT" { next }
+        $0 == "-A INPUT -j LOGNDROP" {
+            print "-A INPUT -s '"${LOCAL_SUBNET}"' -p tcp -m tcp --dport 4556 -j ACCEPT"
+            print "-A INPUT -i wg0 -p tcp -m tcp --dport 4556 -j ACCEPT"
+            print $0
+            next
+        }
+        { print }
+    ' /etc/iptables.rules > /tmp/iptables.rules.new
+    mv /tmp/iptables.rules.new /etc/iptables.rules
+    iptables-restore --test < /etc/iptables.rules
+    iptables-restore < /etc/iptables.rules
+
+    if [ "$(systemctl is-enabled netfilter-persistent 2>/dev/null)" = "masked" ]; then
+        echo -e "${YELLOW}========================================================================="
+        echo "WARNING: netfilter-persistent service is masked by operator!"
+        echo "WARNING: Your hardened iptables rules will not persist across reboots."
+        echo "WARNING: To fix, run: sudo systemctl unmask netfilter-persistent && sudo systemctl enable --now netfilter-persistent"
+        echo -e "=========================================================================${NC}"
+    fi
+fi
+
+if command -v nft &>/dev/null && [ -f /etc/nftables.conf ]; then
+    echo "Hardening firewall rules in /etc/nftables.conf (Local Subnet: ${LOCAL_SUBNET})..."
+    awk '
+        $0 ~ /tcp dport 4556/ { next }
+        /chain input \{/ {
+            print $0
+            print "\t\tip saddr '"${LOCAL_SUBNET}"' tcp dport 4556 accept"
+            print "\t\tiifname \"wg0\" tcp dport 4556 accept"
+            next
+        }
+        { print }
+    ' /etc/nftables.conf > /tmp/nftables.conf.new
+    mv /tmp/nftables.conf.new /etc/nftables.conf
+    nft -c -f /etc/nftables.conf
+    if [ "$(systemctl is-enabled nftables 2>/dev/null)" != "masked" ]; then
+        echo "Enabling and starting nftables service..."
+        systemctl enable nftables
+        systemctl restart nftables
+    else
+        echo -e "${YELLOW}========================================================================="
+        echo "WARNING: nftables service is masked by operator!"
+        echo "WARNING: The firewall rules cannot be applied and the port is not protected."
+        echo "WARNING: To fix, run: sudo systemctl unmask nftables && sudo systemctl enable --now nftables"
+        echo -e "=========================================================================${NC}"
+    fi
+fi
+
+# 8. Disable unnecessary services
+echo "Checking and disabling unnecessary services..."
+for svc in smbd nmbd cups avahi-daemon; do
+    if systemctl list-unit-files | grep -q "^${svc}.service"; then
+        echo "Stopping and disabling ${svc}..."
+        systemctl stop "${svc}" 2>/dev/null || true
+        systemctl disable "${svc}" 2>/dev/null || true
+    fi
+done
+
+# 9. Install security packages if requested
+if [ "$INSTALL_FAIL2BAN" = "yes" ]; then
+    echo "Installing fail2ban package..."
+    apt-get update -y && apt-get install -y fail2ban
+    systemctl enable fail2ban && systemctl restart fail2ban
+fi
+
+if [ "$INSTALL_UNATTENDED_UPGRADES" = "yes" ]; then
+    echo "Installing unattended-upgrades package..."
+    apt-get update -y && apt-get install -y unattended-upgrades
+    echo "unattended-upgrades unattended-upgrades/enable_auto_updates boolean true" | debconf-set-selections
+    dpkg-reconfigure -f noninteractive unattended-upgrades
+fi
+
+# 9.5. Synchronize system clock (NTP)
+echo "Synchronizing target system clock..."
+SYNC_SUCCESS="no"
+
+if command -v chronyc &>/dev/null; then
+    echo "Attempting to force time synchronization using chrony..."
+    if chronyc -a makestep 2>/dev/null; then
+        SYNC_SUCCESS="yes"
+    fi
+fi
+
+if [ "$SYNC_SUCCESS" = "no" ] && command -v ntpdate &>/dev/null; then
+    echo "Attempting to sync with Debian NTP servers using ntpdate..."
+    if ntpdate -u debian.pool.ntp.org 2>/dev/null; then
+        SYNC_SUCCESS="yes"
+    fi
+fi
+
+if [ "$SYNC_SUCCESS" = "no" ] && systemctl list-unit-files | grep -q "^systemd-timesyncd.service"; then
+    echo "Attempting to sync using systemd-timesyncd..."
+    systemctl enable systemd-timesyncd 2>/dev/null || true
+    if systemctl restart systemd-timesyncd 2>/dev/null; then
+        sleep 2
+        SYNC_SUCCESS="yes"
+    fi
+fi
+
+if [ "$SYNC_SUCCESS" = "no" ] && command -v apt-get &>/dev/null; then
+    echo "NTP clients missing or failed. Attempting to install systemd-timesyncd..."
+    if apt-get update -y && apt-get install -y systemd-timesyncd; then
+        echo "systemd-timesyncd installed successfully. Triggering sync..."
+        systemctl enable systemd-timesyncd 2>/dev/null || true
+        if systemctl restart systemd-timesyncd 2>/dev/null; then
+            sleep 2
+            SYNC_SUCCESS="yes"
+        fi
+    fi
+fi
+
+if command -v timedatectl &>/dev/null; then
+    timedatectl set-ntp true 2>/dev/null || true
+fi
+
+if [ "$SYNC_SUCCESS" = "no" ]; then
+    echo -e "${RED}========================================================================="
+    echo "ERROR: Failed to synchronize target clock!"
+    echo "WARNING: No NTP client (chrony, ntpdate, timesyncd) succeeded."
+    echo "WARNING: DTN requires synchronized clocks to validate bundle lifetimes."
+    echo "WARNING: Please ensure your system clock is accurate."
+    echo -e "=========================================================================${NC}"
+else
+    echo "Clock synchronization check completed."
+    if command -v timedatectl &>/dev/null; then
+        timedatectl status 2>/dev/null || true
+    fi
+fi
+
+# 10. Enable and restart services
+echo "Reloading systemd daemon and starting services..."
+systemctl daemon-reload
+systemctl enable hardy-bpa
+systemctl restart hardy-bpa
+
+for inst in "${INSTANCES_TO_ENABLE[@]}"; do
+    echo "Enabling and starting service: hardy-tcpcl@${inst}..."
+    systemctl enable "hardy-tcpcl@${inst}"
+    systemctl restart "hardy-tcpcl@${inst}"
+done
+
+# 11. Remount to RO if needed
+if [ "$IS_RO" = "yes" ]; then
+    echo "Remounting target filesystem back to Read-Only..."
+    mount -o remount,ro /
+fi
+
+echo "==============================================="
+echo "Deployment successful!"
+echo "Service status (BPA):"
+systemctl status hardy-bpa --no-pager
+
+for inst in "${INSTANCES_TO_ENABLE[@]}"; do
+    echo ""
+    echo "Service status (hardy-tcpcl@${inst}):"
+    systemctl status "hardy-tcpcl@${inst}" --no-pager
+done
+echo "==============================================="

@@ -46,3 +46,4 @@ clas:
 
 static-routes:
   routes-file: "@ROUTES_FILE@"
+  watch: "native"
