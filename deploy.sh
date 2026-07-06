@@ -187,7 +187,7 @@ else
     if [ "$TARGET_ARCH" = "x86_64" ] && [ "$(uname -m)" = "x86_64" ]; then
         echo "Performing native compilation (x86_64)..."
         cd "$BUILD_DIR/hardy"
-        cargo build --release --workspace --bins
+        cargo build --all-features --release --workspace --bins
         FINAL_BINARY_PATH="$BUILD_DIR/hardy/target/release/hardy-bpa-server"
         FINAL_TCPCL_BINARY_PATH="$BUILD_DIR/hardy/target/release/hardy-tcpclv4-server"
     elif [ "$TARGET_ARCH" = "armv7l" ] || [ "$TARGET_ARCH" = "armv7" ]; then
@@ -200,7 +200,7 @@ else
             apt-get update && \
             apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6-dev-armhf-cross protobuf-compiler && \
             rustup target add armv7-unknown-linux-musleabihf && \
-            CARGO_TARGET_ARMV7_UNKNOWN_LINUX_MUSLEABIHF_LINKER=arm-linux-gnueabihf-gcc cargo build --target armv7-unknown-linux-musleabihf --release --workspace --bins && \
+            CARGO_TARGET_ARMV7_UNKNOWN_LINUX_MUSLEABIHF_LINKER=arm-linux-gnueabihf-gcc cargo build --all-features --target armv7-unknown-linux-musleabihf --release --workspace --bins && \
             chown -R $(id -u):$(id -g) target/
           "
         FINAL_BINARY_PATH="$BUILD_DIR/hardy/target/armv7-unknown-linux-musleabihf/release/hardy-bpa-server"
