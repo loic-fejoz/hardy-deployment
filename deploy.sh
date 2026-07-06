@@ -11,6 +11,8 @@ TELEMETRY_SERVER=""
 LAYOUT=""
 SOURCE_MODE=""
 BINARY_PATH=""
+TCPCL_BINARY_PATH=""
+DEPLOY_TCPCL="no"
 
 # Determine directory of this script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -29,7 +31,8 @@ print_help() {
     echo "  -t, --telemetry <url>      OpenTelemetry collector endpoint (e.g. http://192.168.1.100:4317)"
     echo "  -l, --layout <type>        Target layout: 'debian' or 'pi-star'"
     echo "  -s, --source <mode>        Binary source: 'path' or 'compile'"
-    echo "  -b, --binary <path>        Path to local pre-compiled binary (required if source is 'path')"
+    echo "  -b, --binary <path>        Path to local pre-compiled hardy-bpa-server"
+    echo "  --tcpcl-binary <path>      Path to local pre-compiled hardy-tcpclv4-server"
     echo "  --help                     Show this help message"
 }
 
@@ -45,6 +48,7 @@ while [[ $# -gt 0 ]]; do
         -l|--layout) LAYOUT="$2"; shift 2 ;;
         -s|--source) SOURCE_MODE="$2"; shift 2 ;;
         -b|--binary) BINARY_PATH="$2"; shift 2 ;;
+        --tcpcl-binary) TCPCL_BINARY_PATH="$2"; DEPLOY_TCPCL="yes"; shift 2 ;;
         --help) print_help; exit 0 ;;
         *) echo "Unknown option: $1"; print_help; exit 1 ;;
     esac
@@ -124,6 +128,16 @@ if [ -z "$TELEMETRY_SERVER" ]; then
     read -p "Telemetry endpoint (leave empty for local logs only): " TELEMETRY_SERVER
 fi
 
+# Ask if we want to deploy the standalone TCPCL CLA server
+if [ "$DEPLOY_TCPCL" = "no" ] && [ -z "$TCPCL_BINARY_PATH" ]; then
+    echo ""
+    read -p "Do you want to deploy the standalone TCPCLv4 CLA server (hardy-tcpclv4-server)? [y/N]: " deploy_cl_choice
+    case "$deploy_cl_choice" in
+        [yY]|[yY][eE][sS]) DEPLOY_TCPCL="yes" ;;
+        *) DEPLOY_TCPCL="no" ;;
+    esac
+fi
+
 # Binary source
 if [ -z "$SOURCE_MODE" ]; then
     echo ""
@@ -138,8 +152,9 @@ if [ -z "$SOURCE_MODE" ]; then
     esac
 fi
 
-# Obtain Binary
+# Obtain Binaries
 FINAL_BINARY_PATH=""
+FINAL_TCPCL_BINARY_PATH=""
 
 if [ "$SOURCE_MODE" = "path" ]; then
     if [ -z "$BINARY_PATH" ]; then
@@ -150,6 +165,17 @@ if [ "$SOURCE_MODE" = "path" ]; then
         exit 1
     fi
     FINAL_BINARY_PATH="$BINARY_PATH"
+
+    if [ "$DEPLOY_TCPCL" = "yes" ]; then
+        if [ -z "$TCPCL_BINARY_PATH" ]; then
+            read -p "Enter path to pre-compiled hardy-tcpclv4-server binary: " TCPCL_BINARY_PATH
+        fi
+        if [ ! -f "$TCPCL_BINARY_PATH" ]; then
+            echo "Error: File $TCPCL_BINARY_PATH does not exist."
+            exit 1
+        fi
+        FINAL_TCPCL_BINARY_PATH="$TCPCL_BINARY_PATH"
+    fi
 else
     echo "Preparing compilation directory at ${BUILD_DIR}..."
     rm -rf "$BUILD_DIR"
@@ -157,12 +183,13 @@ else
     echo "Cloning official ricktaylor/hardy repository..."
     git clone --depth 1 https://github.com/ricktaylor/hardy.git "$BUILD_DIR/hardy"
 
-    echo "Compiling binary for target architecture: $TARGET_ARCH..."
+    echo "Compiling binaries for target architecture: $TARGET_ARCH..."
     if [ "$TARGET_ARCH" = "x86_64" ] && [ "$(uname -m)" = "x86_64" ]; then
         echo "Performing native compilation (x86_64)..."
         cd "$BUILD_DIR/hardy"
         cargo build --release --workspace --bins
         FINAL_BINARY_PATH="$BUILD_DIR/hardy/target/release/hardy-bpa-server"
+        FINAL_TCPCL_BINARY_PATH="$BUILD_DIR/hardy/target/release/hardy-tcpclv4-server"
     elif [ "$TARGET_ARCH" = "armv7l" ] || [ "$TARGET_ARCH" = "armv7" ]; then
         echo "Performing cross-compilation for armv7l using Docker..."
         cd "$BUILD_DIR/hardy"
@@ -177,9 +204,10 @@ else
             chown -R $(id -u):$(id -g) target/
           "
         FINAL_BINARY_PATH="$BUILD_DIR/hardy/target/armv7-unknown-linux-gnueabihf/release/hardy-bpa-server"
+        FINAL_TCPCL_BINARY_PATH="$BUILD_DIR/hardy/target/armv7-unknown-linux-gnueabihf/release/hardy-tcpclv4-server"
     else
         echo "Unsupported target architecture for automatic compilation: $TARGET_ARCH."
-        echo "Please compile the binary manually for $TARGET_ARCH and run this script using --source path."
+        echo "Please compile the binaries manually for $TARGET_ARCH and run this script using --source path."
         exit 1
     fi
 fi
@@ -187,6 +215,7 @@ fi
 # Define target paths based on layout
 if [ "$LAYOUT" = "debian" ]; then
     BIN_DEST="/usr/local/bin/hardy-bpa-server"
+    TCPCL_BIN_DEST="/usr/local/bin/hardy-tcpclv4-server"
     CONF_DIR="/etc/hardy"
     CONF_DEST="${CONF_DIR}/my-config.yaml"
     ROUTES_DEST="${CONF_DIR}/static_routes.yaml"
@@ -196,10 +225,12 @@ if [ "$LAYOUT" = "debian" ]; then
     WORKING_DIR="/var/lib/hardy"
     EXEC_START="/usr/local/bin/hardy-bpa-server -c ${CONF_DEST}"
     RUST_LOG="hardy=info"
-    LOG_REDIRECT=""
+    # Systemd Template Service definition for TCPCL
+    TCPCL_EXEC_START="${TCPCL_BIN_DEST} --config ${CONF_DIR}/tcpcl-%i.yaml"
 else
     # Pi-Star layout
     BIN_DEST="/home/pi-star/hardy-bpa-server"
+    TCPCL_BIN_DEST="/home/pi-star/hardy-tcpclv4-server"
     CONF_DIR="/home/pi-star"
     CONF_DEST="${CONF_DIR}/my-config.yaml"
     ROUTES_DEST="/mnt/usb-storage/hardy-data/static_routes.yaml"
@@ -210,7 +241,9 @@ else
     LOG_FILE="/mnt/usb-storage/hardy-data/hardy.log"
     EXEC_START="/bin/bash -c \"stdbuf -oL -eL ${BIN_DEST} -c ${CONF_DEST} >> ${LOG_FILE} 2>&1\""
     RUST_LOG="hardy=debug"
-    LOG_REDIRECT=""
+    # Systemd Template Service definition for TCPCL (writing logs on USB key)
+    TCPCL_LOG_FILE="/mnt/usb-storage/hardy-data/tcpcl-%i.log"
+    TCPCL_EXEC_START="/bin/bash -c \"stdbuf -oL -eL ${TCPCL_BIN_DEST} --config ${CONF_DIR}/tcpcl-%i.yaml >> ${TCPCL_LOG_FILE} 2>&1\""
 fi
 
 # Prepare environment values
@@ -227,7 +260,7 @@ GEN_DIR="/tmp/hardy-deployment-gen"
 rm -rf "$GEN_DIR"
 mkdir -p "$GEN_DIR"
 
-echo "Generating configuration file..."
+echo "Generating BPA configuration file..."
 sed -e "s|@LOG_LEVEL@|${LOG_LEVEL}|g" \
     -e "s|@IPN_EID@|${IPN_EID}|g" \
     -e "s|@DTN_EID@|${DTN_EID}|g" \
@@ -236,13 +269,48 @@ sed -e "s|@LOG_LEVEL@|${LOG_LEVEL}|g" \
     -e "s|@ROUTES_FILE@|${ROUTES_DEST}|g" \
     "${TEMPLATES_DIR}/my-config.yaml.template" > "${GEN_DIR}/my-config.yaml"
 
-echo "Generating systemd service file..."
+echo "Generating systemd service file for BPA..."
 sed -e "s|@SERVICE_USER@|${SERVICE_USER}|g" \
     -e "s|@WORKING_DIR@|${WORKING_DIR}|g" \
     -e "s|@OTEL_ENV@|${OTEL_ENV}|g" \
     -e "s|@RUST_LOG@|${RUST_LOG}|g" \
     -e "s|@EXEC_START@|${EXEC_START}|g" \
     "${TEMPLATES_DIR}/hardy-bpa.service.template" > "${GEN_DIR}/hardy-bpa.service"
+
+if [ "$DEPLOY_TCPCL" = "yes" ]; then
+    echo "Generating systemd template service file for TCPCL..."
+    sed -e "s|@SERVICE_USER@|${SERVICE_USER}|g" \
+        -e "s|@WORKING_DIR@|${WORKING_DIR}|g" \
+        -e "s|@OTEL_ENV@|${OTEL_ENV}|g" \
+        -e "s|@RUST_LOG@|${RUST_LOG}|g" \
+        -e "s|@EXEC_START@|${TCPCL_EXEC_START}|g" \
+        "${TEMPLATES_DIR}/hardy-tcpcl@.service.template" > "${GEN_DIR}/hardy-tcpcl@.service"
+fi
+
+# Interactive TCPCL connection instance configuration (like Wireguard wg0, wg1...)
+INSTANCES_TO_ENABLE=()
+if [ "$DEPLOY_TCPCL" = "yes" ]; then
+    echo ""
+    echo "--- Standalone TCPCL Connection Setup ---"
+    read -p "Would you like to configure an active outbound TCPCL instance now (e.g. like wg0)? [y/N]: " add_inst_choice
+    case "$add_inst_choice" in
+        [yY]|[yY][eE][sS])
+            read -p "Instance name (e.g. wg0, pistar, dave): " INST_NAME
+            read -p "Local listening port [4557]: " LISTEN_PORT
+            LISTEN_PORT=${LISTEN_PORT:-4557}
+            read -p "Remote peer address & port (e.g. 192.168.3.2:4556): " PEER_ADDRESS
+            if [ -n "$INST_NAME" ] && [ -n "$PEER_ADDRESS" ]; then
+                echo "Generating tcpcl-${INST_NAME}.yaml configuration..."
+                sed -e "s|@INSTANCE_NAME@|${INST_NAME}|g" \
+                    -e "s|@LOG_LEVEL@|${LOG_LEVEL}|g" \
+                    -e "s|@LISTEN_PORT@|${LISTEN_PORT}|g" \
+                    -e "s|@PEER_ADDRESS@|${PEER_ADDRESS}|g" \
+                    "${TEMPLATES_DIR}/tcpcl.yaml.template" > "${GEN_DIR}/tcpcl-${INST_NAME}.yaml"
+                INSTANCES_TO_ENABLE+=("${INST_NAME}")
+            fi
+            ;;
+    esac
+fi
 
 # Target deployment commands
 echo "Deploying to target machine..."
@@ -264,8 +332,8 @@ else
     ssh -p "$TARGET_PORT" "$TARGET_USER@$TARGET_HOST" "mkdir -p ${CONF_DIR} && sudo mkdir -p ${DB_DIR} ${STORE_DIR} && sudo chown -R pi-star:pi-star ${DB_DIR}"
 fi
 
-# Copy binary
-echo "Copying binary to target..."
+# Copy BPA binary
+echo "Copying BPA binary to target..."
 scp -P "$TARGET_PORT" "$FINAL_BINARY_PATH" "$TARGET_USER@$TARGET_HOST:/tmp/hardy-bpa-server"
 if [ "$LAYOUT" = "debian" ]; then
     ssh -p "$TARGET_PORT" "$TARGET_USER@$TARGET_HOST" "sudo mv /tmp/hardy-bpa-server ${BIN_DEST} && sudo chmod +x ${BIN_DEST}"
@@ -273,7 +341,18 @@ else
     ssh -p "$TARGET_PORT" "$TARGET_USER@$TARGET_HOST" "mv /tmp/hardy-bpa-server ${BIN_DEST} && chmod +x ${BIN_DEST}"
 fi
 
-# Copy config
+# Copy TCPCL binary if enabled
+if [ "$DEPLOY_TCPCL" = "yes" ]; then
+    echo "Copying TCPCL binary to target..."
+    scp -P "$TARGET_PORT" "$FINAL_TCPCL_BINARY_PATH" "$TARGET_USER@$TARGET_HOST:/tmp/hardy-tcpclv4-server"
+    if [ "$LAYOUT" = "debian" ]; then
+        ssh -p "$TARGET_PORT" "$TARGET_USER@$TARGET_HOST" "sudo mv /tmp/hardy-tcpclv4-server ${TCPCL_BIN_DEST} && sudo chmod +x ${TCPCL_BIN_DEST}"
+    else
+        ssh -p "$TARGET_PORT" "$TARGET_USER@$TARGET_HOST" "mv /tmp/hardy-tcpclv4-server ${TCPCL_BIN_DEST} && chmod +x ${TCPCL_BIN_DEST}"
+    fi
+fi
+
+# Copy BPA config
 echo "Copying configuration to target..."
 scp -P "$TARGET_PORT" "${GEN_DIR}/my-config.yaml" "$TARGET_USER@$TARGET_HOST:/tmp/my-config.yaml"
 if [ "$LAYOUT" = "debian" ]; then
@@ -285,14 +364,50 @@ fi
 # Create empty routes file if it doesn't exist
 ssh -p "$TARGET_PORT" "$TARGET_USER@$TARGET_HOST" "[ ! -f ${ROUTES_DEST} ] && sudo touch ${ROUTES_DEST} && sudo chown ${SERVICE_USER} ${ROUTES_DEST} || true"
 
-# Copy systemd unit
+# Copy systemd units
 echo "Copying systemd unit..."
 scp -P "$TARGET_PORT" "${GEN_DIR}/hardy-bpa.service" "$TARGET_USER@$TARGET_HOST:/tmp/hardy-bpa.service"
 ssh -p "$TARGET_PORT" "$TARGET_USER@$TARGET_HOST" "sudo mv /tmp/hardy-bpa.service /etc/systemd/system/hardy-bpa.service"
 
-# Start service
-echo "Reloading systemd daemon and starting service..."
+if [ "$DEPLOY_TCPCL" = "yes" ]; then
+    scp -P "$TARGET_PORT" "${GEN_DIR}/hardy-tcpcl@.service" "$TARGET_USER@$TARGET_HOST:/tmp/hardy-tcpcl@.service"
+    ssh -p "$TARGET_PORT" "$TARGET_USER@$TARGET_HOST" "sudo mv /tmp/hardy-tcpcl@.service /etc/systemd/system/hardy-tcpcl@.service"
+fi
+
+# Deploy newly configured TCPCL instances
+for inst in "${INSTANCES_TO_ENABLE[@]}"; do
+    echo "Deploying newly configured instance: ${inst}..."
+    scp -P "$TARGET_PORT" "${GEN_DIR}/tcpcl-${inst}.yaml" "$TARGET_USER@$TARGET_HOST:/tmp/tcpcl-${inst}.yaml"
+    if [ "$LAYOUT" = "debian" ]; then
+        ssh -p "$TARGET_PORT" "$TARGET_USER@$TARGET_HOST" "sudo mv /tmp/tcpcl-${inst}.yaml ${CONF_DIR}/tcpcl-${inst}.yaml"
+    else
+        ssh -p "$TARGET_PORT" "$TARGET_USER@$TARGET_HOST" "mv /tmp/tcpcl-${inst}.yaml ${CONF_DIR}/tcpcl-${inst}.yaml"
+    fi
+done
+
+# Look for and deploy existing local tcpcl-*.yaml configuration files (like Wireguard wg0, wg1 files)
+for f in "${SCRIPT_DIR}"/tcpcl-*.yaml; do
+    [ -e "$f" ] || continue
+    inst_name=$(basename "$f" .yaml | sed 's/^tcpcl-//')
+    echo "Deploying existing configuration for instance: ${inst_name}..."
+    scp -P "$TARGET_PORT" "$f" "$TARGET_USER@$TARGET_HOST:/tmp/tcpcl-${inst_name}.yaml"
+    if [ "$LAYOUT" = "debian" ]; then
+        ssh -p "$TARGET_PORT" "$TARGET_USER@$TARGET_HOST" "sudo mv /tmp/tcpcl-${inst_name}.yaml ${CONF_DIR}/tcpcl-${inst_name}.yaml"
+    else
+        ssh -p "$TARGET_PORT" "$TARGET_USER@$TARGET_HOST" "mv /tmp/tcpcl-${inst_name}.yaml ${CONF_DIR}/tcpcl-${inst_name}.yaml"
+    fi
+    INSTANCES_TO_ENABLE+=("${inst_name}")
+done
+
+# Start/enable services
+echo "Reloading systemd daemon and starting services..."
 ssh -p "$TARGET_PORT" "$TARGET_USER@$TARGET_HOST" "sudo systemctl daemon-reload && sudo systemctl enable hardy-bpa && sudo systemctl restart hardy-bpa"
+
+# Start and enable all configured TCPCL template instances
+for inst in "${INSTANCES_TO_ENABLE[@]}"; do
+    echo "Enabling and starting service: hardy-tcpcl@${inst}..."
+    ssh -p "$TARGET_PORT" "$TARGET_USER@$TARGET_HOST" "sudo systemctl enable hardy-tcpcl@${inst} && sudo systemctl restart hardy-tcpcl@${inst}"
+done
 
 # Remount back to Read-Only if it was originally read-only
 if [ "$IS_RO" = "yes" ]; then
@@ -302,8 +417,14 @@ fi
 
 echo "==============================================="
 echo "Deployment successful!"
-echo "Service status:"
+echo "Service status (BPA):"
 ssh -p "$TARGET_PORT" "$TARGET_USER@$TARGET_HOST" "sudo systemctl status hardy-bpa --no-pager"
+
+for inst in "${INSTANCES_TO_ENABLE[@]}"; do
+    echo ""
+    echo "Service status (hardy-tcpcl@${inst}):"
+    ssh -p "$TARGET_PORT" "$TARGET_USER@$TARGET_HOST" "sudo systemctl status hardy-tcpcl@${inst} --no-pager"
+done
 echo "==============================================="
 
 # Cleanup build directory

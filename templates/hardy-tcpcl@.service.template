@@ -1,0 +1,17 @@
+[Unit]
+Description=Hardy TCPCLv4 Convergence Layer Adapter (Instance: %i)
+Requires=hardy-bpa.service
+After=hardy-bpa.service
+
+[Service]
+Type=simple
+User=@SERVICE_USER@
+WorkingDirectory=@WORKING_DIR@
+@OTEL_ENV@
+Environment="RUST_LOG=@RUST_LOG@"
+ExecStart=@EXEC_START@
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

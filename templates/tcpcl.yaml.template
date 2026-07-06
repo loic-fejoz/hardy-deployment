@@ -1,0 +1,7 @@
+# Standalone TCPCLv4 CLA configuration for instance
+bpa-address: "http://127.0.0.1:50051"
+cla-name: "tcpcl-@INSTANCE_NAME@"
+log-level: "@LOG_LEVEL@"
+address: "0.0.0.0:@LISTEN_PORT@"
+peers:
+  - "@PEER_ADDRESS@"
