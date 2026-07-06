@@ -1,0 +1,16 @@
+[Unit]
+Description=Hardy Bundle Protocol Agent (BPA) Server
+After=network.target
+
+[Service]
+Type=simple
+User=@SERVICE_USER@
+WorkingDirectory=@WORKING_DIR@
+@OTEL_ENV@
+Environment="RUST_LOG=@RUST_LOG@"
+ExecStart=@EXEC_START@
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

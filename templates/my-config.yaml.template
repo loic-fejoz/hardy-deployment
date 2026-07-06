@@ -1,0 +1,48 @@
+log-level: "@LOG_LEVEL@"
+node-ids:
+  - "@IPN_EID@"
+  - "@DTN_EID@"
+status-reports: true
+poll-channel-depth: 16
+processing-pool-size: 16
+
+grpc:
+  address: "127.0.0.1:50051"
+  services:
+    - application
+    - cla
+    - service
+
+storage:
+  lru-capacity: 1024
+  max-cached-bundle-size: 16384
+  metadata:
+    type: sqlite
+    db-dir: "@DB_DIR@"
+  bundle:
+    type: localdisk
+    sync: true
+    store-dir: "@STORE_DIR@"
+
+rfc9171-validity:
+  primary-block-integrity: false
+  bundle-age-required: true
+
+built-in-services:
+  echo:
+    - 7
+    - echo
+
+clas:
+  - name: tcp-cla-1
+    type: tcpclv4
+    address: "[::]:4556"
+    segment-mru: 16384
+    transfer-mru: 1073741824
+    max-idle-connections: 6
+    contact-timeout: 15
+    keepalive-interval: 60
+    require-tls: false
+
+static-routes:
+  routes-file: "@ROUTES_FILE@"
