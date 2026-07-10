@@ -123,11 +123,12 @@ fi
 if command -v nft &>/dev/null && [ -f /etc/nftables.conf ]; then
     echo "Hardening firewall rules in /etc/nftables.conf (Local Subnet: ${LOCAL_SUBNET})..."
     awk '
-        $0 ~ /tcp dport 4556/ { next }
+        $0 ~ /tcp dport/ { next }
         /type filter hook input/ {
             print $0
-            print "\t\tip saddr '"${LOCAL_SUBNET}"' tcp dport 4556 accept"
-            print "\t\tiifname \"wg0\" tcp dport 4556 accept"
+            print "\t\tip saddr '"${LOCAL_SUBNET}"' tcp dport { 22, 80, 443, 139, 2222, 4556 } accept"
+            print "\t\tiifname \"wg0\" tcp dport { 22, 4556 } accept"
+            print "\t\ttcp dport { 22, 80, 443, 139, 2222, 4556 } drop"
             next
         }
         { print }
