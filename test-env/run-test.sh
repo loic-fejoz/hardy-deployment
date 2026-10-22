@@ -45,12 +45,12 @@ if [ "$TEST_MODE" = "compile" ]; then
   docker run -d --name hardy-test-source \
     --link hardy-test-target:target \
     -v "${PROJECT_DIR}:/app" \
-    rust:slim-bookworm tail -f /dev/null
+    rust:bookworm tail -f /dev/null
 
   echo "Setting up compilation and SSH dependencies on source..."
   docker exec hardy-test-source sh -c "
     apt-get update && \
-    apt-get install -y openssh-client git protobuf-compiler libprotobuf-dev && \
+    apt-get install -y openssh-client git protobuf-compiler libprotobuf-dev pkg-config libssl-dev cmake && \
     mkdir -p /root/.ssh && \
     ssh-keygen -t rsa -N '' -f /root/.ssh/id_rsa
   "
