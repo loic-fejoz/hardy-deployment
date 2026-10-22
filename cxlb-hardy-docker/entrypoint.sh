@@ -19,6 +19,8 @@ export LTP_MAX_SEGMENT_LEN="${LTP_MAX_SEGMENT_LEN:-1000}"
 export LTP_RTT="${LTP_RTT:-1s}"
 export LTP_ACK_MARGIN="${LTP_ACK_MARGIN:-250ms}"
 export LTP_PEERS="${LTP_PEERS:-}"
+export ENABLE_TCPCL="${ENABLE_TCPCL:-true}"
+export TCPCL_PORT="${TCPCL_PORT:-4556}"
 export RF_FREQ="${RF_FREQ:-434000000}"
 export LOG_LEVEL="${LOG_LEVEL:-info}"
 export START_FLOWGRAPH="${START_FLOWGRAPH:-true}"
@@ -110,6 +112,17 @@ if raw_peers:
 else:
     peers_yaml = "    peers: []\n"
 
+enable_tcpcl = os.environ.get("ENABLE_TCPCL", "true").lower() in ("true", "1", "yes")
+tcpcl_port = os.environ.get("TCPCL_PORT", "4556").strip()
+
+tcpcl_yaml = ""
+if enable_tcpcl:
+    tcpcl_yaml = f"""  - name: tcp-cla-1
+    type: tcpclv4
+    listeners:
+      - "0.0.0.0:{tcpcl_port}"
+"""
+
 config_template = f"""log-level: {log_level}
 node-ids:
 {node_ids_yaml}
@@ -145,7 +158,7 @@ built-in-services:
     - echo
 
 clas:
-  - name: ltp-cla-1
+{tcpcl_yaml}  - name: ltp-cla-1
     type: ltp
     engine-id: {engine_id}
     max-segment-payload-len: {max_segment_len}

@@ -26,8 +26,8 @@ WORKDIR /build
 RUN git clone https://github.com/loic-fejoz/hardy.git /build/hardy \
     && cd /build/hardy \
     && git checkout feat/ltp-cla \
-    && cargo build --release --bin hardy-bpa-server \
-    && cp target/release/hardy-bpa-server /build/hardy-bpa-server \
+    && cargo build --release --bin hardy-bpa-server --bin bp \
+    && cp target/release/hardy-bpa-server target/release/bp /build/ \
     && git checkout e7694992598f725ecfa3919a5de8105cd48956fe \
     && git clone --depth 1 https://github.com/loic-fejoz/dtn-hdy-utils.git /build/dtn-hdy-utils \
     && cd /build/dtn-hdy-utils \
@@ -56,6 +56,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy compiled Rust binaries from builder stage
 COPY --from=builder /build/hardy-bpa-server /usr/local/bin/
+COPY --from=builder /build/bp /usr/local/bin/
 COPY --from=builder /build/dtn-hdy-utils/target/release/dtn* /usr/local/bin/
 COPY --from=builder /build/dtn-hdy-utils/target/release/hdy-stats /usr/local/bin/
 
@@ -72,7 +73,7 @@ RUN chmod +x /entrypoint.sh
 
 WORKDIR /opt/cxlb-hardy
 
-# Expose default Hardy gRPC and UDP ports
-EXPOSE 50051 52001 52002
+# Expose default Hardy TCPCLv4, gRPC and UDP ports
+EXPOSE 4556 50051 52001 52002
 
 ENTRYPOINT ["/entrypoint.sh"]

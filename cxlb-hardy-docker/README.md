@@ -64,7 +64,7 @@ You can test the container locally on your host even without USRP hardware:
 make run-test
 ```
 
-This target launches a test container, checks the presence and version of `hardy-bpa-server`, tests the availability of `dtn-hdy-utils` (`dtnping`, `dtnsend`, `dtnprint`, `dtnfiles`, `dtnbasket`, `hdy-stats`), inspects the generated configuration, and cleans up.
+This target launches a test container, checks the presence and version of `hardy-bpa-server`, tests the availability of `dtn-hdy-utils` (`dtnping`, `dtnsend`, `dtnprint`, `dtnfiles`, `dtnbasket`, `hdy-stats`) and `hardy-tools` (`bp`), tests `bp ping` and `dtnping` against the local echo service, inspects the generated configuration, and cleans up.
 
 ---
 
@@ -81,6 +81,8 @@ This target launches a test container, checks the presence and version of `hardy
 | `LTP_MAX_SEGMENT_LEN` | `1000` | Maximum LTP segment payload length (bytes) |
 | `LTP_RTT` | `1s` | LTP round-trip time estimation |
 | `LTP_ACK_MARGIN` | `250ms` | LTP ACK margin delay |
+| `ENABLE_TCPCL` | `true` | Enable built-in TCPCLv4 CLA |
+| `TCPCL_PORT` | `4556` | TCP port for TCPCLv4 listener |
 | `RF_FREQ` | `434000000` | RF Carrier / center frequency for USRP in Hz (e.g. 434000000, 868000000) |
 | `SCENARIO_SCRIPT` | *empty* | Absolute path to custom bash script to run on startup |
 | `AUTO_EXIT` | `false` | If `true`, the container terminates with the exit code of `SCENARIO_SCRIPT` |
