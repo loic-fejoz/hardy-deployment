@@ -50,7 +50,7 @@ if [ "$TEST_MODE" = "compile" ]; then
   echo "Setting up compilation and SSH dependencies on source..."
   docker exec hardy-test-source sh -c "
     apt-get update && \
-    apt-get install -y openssh-client git protobuf-compiler && \
+    apt-get install -y openssh-client git protobuf-compiler libprotobuf-dev && \
     mkdir -p /root/.ssh && \
     ssh-keygen -t rsa -N '' -f /root/.ssh/id_rsa
   "
