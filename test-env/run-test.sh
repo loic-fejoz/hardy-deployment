@@ -21,7 +21,7 @@ docker rm -f hardy-test-target hardy-test-source 2>/dev/null || true
 
 # 2. Start target container
 echo "Starting target container..."
-docker run -d --name hardy-test-target debian:11-slim tail -f /dev/null
+docker run -d --name hardy-test-target debian:12-slim tail -f /dev/null
 
 # 3. Configure SSH and Mock systemctl on target
 echo "Configuring SSH and Mock systemctl on target..."
@@ -45,7 +45,7 @@ if [ "$TEST_MODE" = "compile" ]; then
   docker run -d --name hardy-test-source \
     --link hardy-test-target:target \
     -v "${PROJECT_DIR}:/app" \
-    rust:slim-bullseye tail -f /dev/null
+    rust:slim-bookworm tail -f /dev/null
 
   echo "Setting up compilation and SSH dependencies on source..."
   docker exec hardy-test-source sh -c "
@@ -60,7 +60,7 @@ else
     --link hardy-test-target:target \
     -v "${PROJECT_DIR}:/app" \
     -v "${BIN_DIR}:/binaries" \
-    debian:11-slim tail -f /dev/null
+    debian:12-slim tail -f /dev/null
 
   echo "Setting up SSH keys..."
   docker exec hardy-test-source sh -c "
