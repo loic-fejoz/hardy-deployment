@@ -81,6 +81,7 @@ This target launches a test container, checks the presence and version of `hardy
 | `LTP_MAX_SEGMENT_LEN` | `1000` | Maximum LTP segment payload length (bytes) |
 | `LTP_RTT` | `1s` | LTP round-trip time estimation |
 | `LTP_ACK_MARGIN` | `250ms` | LTP ACK margin delay |
+| `RF_FREQ` | `434000000` | RF Carrier / center frequency for USRP in Hz (e.g. 434000000, 868000000) |
 | `SCENARIO_SCRIPT` | *empty* | Absolute path to custom bash script to run on startup |
 | `AUTO_EXIT` | `false` | If `true`, the container terminates with the exit code of `SCENARIO_SCRIPT` |
 | `START_FLOWGRAPH` | `true` | Set to `false` to disable starting GNU Radio flowgraph |

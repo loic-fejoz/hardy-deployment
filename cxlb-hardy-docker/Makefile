@@ -17,6 +17,7 @@ run-test: build
 		-e NODE_EID="ipn:100.0" \
 		-e LTP_ENGINE_ID=100 \
 		-e LTP_PEERS="200=ipn:200.0, 300=dtn://f4jxq/" \
+		-e RF_FREQ="434000000" \
 		-e IGNORE_FLOWGRAPH_FAILURE=true \
 		-e AUTO_EXIT=false \
 		$(IMAGE_NAME)

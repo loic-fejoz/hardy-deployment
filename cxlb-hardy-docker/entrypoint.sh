@@ -19,6 +19,7 @@ export LTP_MAX_SEGMENT_LEN="${LTP_MAX_SEGMENT_LEN:-1000}"
 export LTP_RTT="${LTP_RTT:-1s}"
 export LTP_ACK_MARGIN="${LTP_ACK_MARGIN:-250ms}"
 export LTP_PEERS="${LTP_PEERS:-}"
+export RF_FREQ="${RF_FREQ:-434000000}"
 export LOG_LEVEL="${LOG_LEVEL:-info}"
 export START_FLOWGRAPH="${START_FLOWGRAPH:-true}"
 export FLOWGRAPH_SCRIPT="${FLOWGRAPH_SCRIPT:-/opt/cxlb-hardy/flowgraphs/udp_gfsk.py}"
@@ -187,7 +188,7 @@ trap cleanup SIGTERM SIGINT SIGQUIT
 # Start GNU Radio flowgraph if enabled
 if [ "$START_FLOWGRAPH" = "true" ]; then
     if [ -f "$FLOWGRAPH_SCRIPT" ]; then
-        echo "[ENTRYPOINT] Starting GNU Radio flowgraph: $FLOWGRAPH_SCRIPT..."
+        echo "[ENTRYPOINT] Starting GNU Radio flowgraph: $FLOWGRAPH_SCRIPT (RF Frequency: ${RF_FREQ} Hz)..."
         python3 -u "$FLOWGRAPH_SCRIPT" &
         GR_PID=$!
         echo "[ENTRYPOINT] GNU Radio running with PID: $GR_PID"

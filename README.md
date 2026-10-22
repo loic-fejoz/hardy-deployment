@@ -4,7 +4,7 @@ This repository contains deployment and configuration scripts for deploying [**H
 
 ## Target Audience & Layouts
 
-This script is designed for two main target profiles:
+This script is designed for three main target profiles:
 
 1. **Standard Debian Layout**: Installs Hardy following standard UNIX conventions.
    - Binary path: `/usr/local/bin/hardy-bpa-server`
@@ -20,6 +20,10 @@ This script is designed for two main target profiles:
    - Logs: Redirected to a persistent log file on the USB key (`/mnt/usb-storage/hardy-data/hardy.log`).
    - Run User: `pi-star`
    - **Automated Read-Only filesystem handling**: The script will automatically detect if the target filesystem is read-only (`ro`), remount it to read-write (`rw`) to perform the deployment, and remount it back to read-only (`ro`) when finished.
+
+3. **CorteXlab**: Specifically designed for experiment runned on [CorteXlab](https://www.cortexlab.fr)
+   - SQLite, file system, GNURadio flowgraph for LTP transmission over USRP radio.
+   - More details are available in the [dedicated CorteXlab README](cxlb-hardy-docker/README.md).
 
 ## Usage
 

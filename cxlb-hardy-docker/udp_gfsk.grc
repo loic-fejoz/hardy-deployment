@@ -154,7 +154,7 @@ blocks:
   id: variable
   parameters:
     comment: RF Carrier frequency for CorteXlab USRP (Hz)
-    value: '434000000'
+    value: 'float(__import__("os").environ.get("RF_FREQ", "434000000"))'
   states:
     bus_sink: false
     bus_source: false
