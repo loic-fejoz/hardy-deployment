@@ -2,6 +2,8 @@
 # Multi-stage Dockerfile for CorteXlab Hardy Node with LTP CLA and GNU Radio
 # ==============================================================================
 
+ARG BASE_IMAGE=cxlb-docker-gnuradio-3.10:latest
+
 # ------------------------------------------------------------------------------
 # Stage 1: Rust Builder (compile hardy-bpa-server & dtn-hdy-utils)
 # ------------------------------------------------------------------------------
@@ -34,7 +36,7 @@ RUN git clone https://github.com/loic-fejoz/hardy.git /build/hardy \
 # ------------------------------------------------------------------------------
 # Stage 2: Runtime Image (CorteXlab GNU Radio 3.10 environment)
 # ------------------------------------------------------------------------------
-FROM cxlb-docker-gnuradio-3.10:latest
+FROM ${BASE_IMAGE}
 
 LABEL maintainer="Loïc Féjoz"
 LABEL description="CorteXlab experiment node with GNU Radio 3.10, Hardy BPA (LTP CLA), and DTN utilities"

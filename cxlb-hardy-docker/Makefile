@@ -1,4 +1,5 @@
 IMAGE_NAME ?= cxlb-hardy:latest
+BASE_IMAGE ?= cxlb-docker-gnuradio-3.10:latest
 CONTAINER_NAME ?= cxlb-hardy-test
 
 .PHONY: all build run-test clean
@@ -6,7 +7,7 @@ CONTAINER_NAME ?= cxlb-hardy-test
 all: build
 
 build:
-	docker build -t $(IMAGE_NAME) .
+	docker build --build-arg BASE_IMAGE=$(BASE_IMAGE) -t $(IMAGE_NAME) .
 
 run-test: build
 	@echo "==> Starting test container $(CONTAINER_NAME)..."

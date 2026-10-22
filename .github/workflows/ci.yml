@@ -1,0 +1,104 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [ "main", "feat/**" ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/cxlb-hardy
+  BASE_IMAGE: ghcr.io/loic-fejoz/cxlb-docker-gnuradio-3.10:latest
+
+jobs:
+  lint:
+    name: Lint & Syntax Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run ShellCheck
+        run: |
+          sudo apt-get update && sudo apt-get install -y shellcheck
+          shellcheck deploy.sh cxlb-hardy-docker/entrypoint.sh test-env/run-test.sh test-env/run-ping-test.sh
+
+      - name: Validate YAML files
+        run: |
+          python3 -c "
+          import glob, sys, yaml
+          files = glob.glob('*.yaml') + glob.glob('templates/*.yaml') + glob.glob('.github/workflows/*.yml')
+          for f in files:
+              try:
+                  with open(f) as fp:
+                      content = fp.read()
+                      if '{{' not in content:
+                          yaml.safe_load(content)
+                  print(f'Valid YAML: {f}')
+              except Exception as e:
+                  print(f'Error in {f}: {e}', file=sys.stderr)
+                  sys.exit(1)
+          "
+
+  deploy-test:
+    name: Test Hardy Deployment (Debian Target)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Deployment Integration Test in Compile Mode
+        run: |
+          bash test-env/run-test.sh --compile
+
+  cxlb-docker:
+    name: Build & Test CorteXlab Docker Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Run Smoke Test Container
+        working-directory: cxlb-hardy-docker
+        run: |
+          make run-test BASE_IMAGE=${{ env.BASE_IMAGE }}
+
+      - name: Extract Docker metadata
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+
+      - name: Build and Push Docker image to GHCR
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+        uses: docker/build-push-action@v5
+        with:
+          context: cxlb-hardy-docker
+          push: true
+          build-args: |
+            BASE_IMAGE=${{ env.BASE_IMAGE }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

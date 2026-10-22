@@ -46,8 +46,8 @@ Build the image using Docker and the provided `Makefile`:
 
 ```bash
 make build
-# or with a custom image name
-make build IMAGE_NAME=my-registry.example.org/cxlb-hardy:latest
+# or with a custom image name and base image
+make build IMAGE_NAME=ghcr.io/loic-fejoz/cxlb-hardy:latest BASE_IMAGE=ghcr.io/loic-fejoz/cxlb-docker-gnuradio-3.10:latest
 ```
 
 The build uses a multi-stage Docker build:

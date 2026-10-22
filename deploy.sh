@@ -80,7 +80,7 @@ if [ -z "$TARGET_HOST" ]; then
         echo "Error: Target host is required in non-interactive mode."
         exit 1
     fi
-    read -p "Target IP/Hostname: " TARGET_HOST
+    read -r -p "Target IP/Hostname: " TARGET_HOST
     if [ -z "$TARGET_HOST" ]; then
         echo "Error: Host cannot be empty."
         exit 1
@@ -92,7 +92,7 @@ if [ -z "$TARGET_PORT" ]; then
     if [ "$NON_INTERACTIVE" = "yes" ]; then
         TARGET_PORT="22"
     else
-        read -p "Target SSH Port [22]: " TARGET_PORT
+        read -r -p "Target SSH Port [22]: " TARGET_PORT
         TARGET_PORT=${TARGET_PORT:-22}
     fi
 fi
@@ -105,7 +105,7 @@ if [ -z "$LAYOUT" ]; then
         echo "Select target layout:"
         echo "  1) Debian (standard system paths: /usr/local/bin, /etc/hardy, /var/lib/hardy)"
         echo "  2) Pi-Star (home directory and base on USB key: /mnt/usb-storage/hardy-data)"
-        read -p "Choice (1 or 2): " layout_choice
+        read -r -p "Choice (1 or 2): " layout_choice
         case "$layout_choice" in
             1) LAYOUT="debian" ;;
             2) LAYOUT="pi-star" ;;
@@ -127,7 +127,7 @@ if [ -z "$TARGET_USER" ]; then
         if [ "$LAYOUT" = "pi-star" ]; then
             default_user="pi-star"
         fi
-        read -p "Target SSH User [${default_user}]: " TARGET_USER
+        read -r -p "Target SSH User [${default_user}]: " TARGET_USER
         TARGET_USER=${TARGET_USER:-${default_user}}
     fi
 fi
@@ -156,14 +156,14 @@ if [ -z "$DTN_EID" ]; then
         echo "--- EID Configuration ---"
         echo "Note: For amateur radio nodes, it is recommended to use your callsign."
         echo "Example: dtn://f4jxq/ or dtn://g4dpz/"
-        read -p "Enter DTN EID [dtn://local-node/]: " DTN_EID
+        read -r -p "Enter DTN EID [dtn://local-node/]: " DTN_EID
         DTN_EID=${DTN_EID:-dtn://local-node/}
     fi
 fi
 
 if [ "$IPN_EID_PASSED" = "no" ]; then
     if [ "$NON_INTERACTIVE" = "no" ]; then
-        read -p "Enter IPN EID [${IPN_EID}]: " ipn_input
+        read -r -p "Enter IPN EID [${IPN_EID}]: " ipn_input
         IPN_EID=${ipn_input:-$IPN_EID}
     fi
 fi
@@ -177,7 +177,7 @@ if [ -z "$TELEMETRY_SERVER" ] && [ -z "$TELEMETRY_PASSED" ]; then
         echo "--- OpenTelemetry Telemetry ---"
         echo "Do you want to export logs and metrics to a remote OpenTelemetry collector?"
         echo "If yes, enter the OTLP gRPC endpoint URL (e.g., http://192.168.1.100:4317)."
-        read -p "Telemetry endpoint (leave empty for local logs only): " TELEMETRY_SERVER
+        read -r -p "Telemetry endpoint (leave empty for local logs only): " TELEMETRY_SERVER
     fi
 fi
 
@@ -187,7 +187,7 @@ if [ "$DEPLOY_TCPCL" = "no" ] && [ -z "$TCPCL_BINARY_PATH" ]; then
         DEPLOY_TCPCL="no"
     else
         echo ""
-        read -p "Do you want to deploy the standalone TCPCLv4 CLA server (hardy-tcpclv4-server)? [y/N]: " deploy_cl_choice
+        read -r -p "Do you want to deploy the standalone TCPCLv4 CLA server (hardy-tcpclv4-server)? [y/N]: " deploy_cl_choice
         case "$deploy_cl_choice" in
             [yY]|[yY][eE][sS]) DEPLOY_TCPCL="yes" ;;
             *) DEPLOY_TCPCL="no" ;;
@@ -199,13 +199,13 @@ fi
 if [ "$NON_INTERACTIVE" = "no" ]; then
     echo ""
     echo "--- Host Security Extensions ---"
-    read -p "Would you like to install fail2ban for SSH security hardening? [y/N]: " f2b_choice
+    read -r -p "Would you like to install fail2ban for SSH security hardening? [y/N]: " f2b_choice
     case "$f2b_choice" in
         [yY]|[yY][eE][sS]) INSTALL_FAIL2BAN="yes" ;;
         *) INSTALL_FAIL2BAN="no" ;;
     esac
 
-    read -p "Would you like to install unattended-upgrades for automatic security updates? [y/N]: " ua_choice
+    read -r -p "Would you like to install unattended-upgrades for automatic security updates? [y/N]: " ua_choice
     case "$ua_choice" in
         [yY]|[yY][eE][sS]) INSTALL_UNATTENDED_UPGRADES="yes" ;;
         *) INSTALL_UNATTENDED_UPGRADES="no" ;;
@@ -221,7 +221,7 @@ if [ -z "$SOURCE_MODE" ]; then
         echo "--- Binary Source Selection ---"
         echo "  1) Provide path to pre-compiled local binary"
         echo "  2) Clone from GitHub (official) and compile/cross-compile now"
-        read -p "Choice (1 or 2): " source_choice
+        read -r -p "Choice (1 or 2): " source_choice
         case "$source_choice" in
             1) SOURCE_MODE="path" ;;
             2) SOURCE_MODE="compile" ;;
@@ -240,7 +240,7 @@ if [ "$SOURCE_MODE" = "path" ]; then
             echo "Error: Binary path is required in non-interactive mode."
             exit 1
         fi
-        read -p "Enter path to pre-compiled hardy-bpa-server binary: " BINARY_PATH
+        read -r -p "Enter path to pre-compiled hardy-bpa-server binary: " BINARY_PATH
     fi
     if [ ! -f "$BINARY_PATH" ]; then
         echo "Error: File $BINARY_PATH does not exist."
@@ -254,7 +254,7 @@ if [ "$SOURCE_MODE" = "path" ]; then
                 echo "Error: TCPCL binary path is required in non-interactive mode."
                 exit 1
             fi
-            read -p "Enter path to pre-compiled hardy-tcpclv4-server binary: " TCPCL_BINARY_PATH
+            read -r -p "Enter path to pre-compiled hardy-tcpclv4-server binary: " TCPCL_BINARY_PATH
         fi
         if [ ! -f "$TCPCL_BINARY_PATH" ]; then
             echo "Error: File $TCPCL_BINARY_PATH does not exist."
@@ -278,6 +278,7 @@ else
     if [ "$TARGET_ARCH" = "x86_64" ] && [ "$(uname -m)" = "x86_64" ]; then
         echo "Performing native compilation (x86_64)..."
         cd "$BUILD_DIR/hardy"
+        # shellcheck disable=SC2086
         RUSTFLAGS="-C target-cpu=generic" cargo build --all-features --release --workspace --bins ${CARGO_EXCLUDES}
         FINAL_BINARY_PATH="$BUILD_DIR/hardy/target/release/hardy-bpa-server"
         if [ "$DEPLOY_TCPCL" = "yes" ]; then
@@ -417,13 +418,13 @@ INSTANCES_TO_ENABLE=()
 if [ "$DEPLOY_TCPCL" = "yes" ] && [ "$NON_INTERACTIVE" = "no" ]; then
     echo ""
     echo "--- Standalone TCPCL Connection Setup ---"
-    read -p "Would you like to configure an active outbound TCPCL instance now (e.g. like wg0)? [y/N]: " add_inst_choice
+    read -r -p "Would you like to configure an active outbound TCPCL instance now (e.g. like wg0)? [y/N]: " add_inst_choice
     case "$add_inst_choice" in
         [yY]|[yY][eE][sS])
-            read -p "Instance name (e.g. wg0, pistar, dave): " INST_NAME
-            read -p "Local listening port [4557]: " LISTEN_PORT
+            read -r -p "Instance name (e.g. wg0, pistar, dave): " INST_NAME
+            read -r -p "Local listening port [4557]: " LISTEN_PORT
             LISTEN_PORT=${LISTEN_PORT:-4557}
-            read -p "Remote peer address & port (e.g. 192.168.3.2:4556): " PEER_ADDRESS
+            read -r -p "Remote peer address & port (e.g. 192.168.3.2:4556): " PEER_ADDRESS
             if [ -n "$INST_NAME" ] && [ -n "$PEER_ADDRESS" ]; then
                 echo "Generating tcpcl-${INST_NAME}.yaml configuration..."
                 sed -e "s|@INSTANCE_NAME@|${INST_NAME}|g" \
